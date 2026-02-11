@@ -1,17 +1,17 @@
-import { GoogleGenAI, Type, Schema } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Technician } from "../types";
 
 const getAiClient = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
-    console.warn("API Key not found in environment variables.");
+    console.error("ERRO: API_KEY não configurada. A IA não funcionará até que você adicione a chave no ambiente.");
     return null;
   }
   return new GoogleGenAI({ apiKey });
 };
 
 /**
- * Suggests the best technician based on the ticket description.
+ * Suggests the best technician based on the ticket description using Gemini 3 Flash.
  */
 export const suggestTechnician = async (description: string, technicians: Technician[]): Promise<string | null> => {
   const ai = getAiClient();
@@ -31,15 +31,19 @@ export const suggestTechnician = async (description: string, technicians: Techni
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            suggestedTechnicianName: { type: Type.STRING }
-          }
+            suggestedTechnicianName: { 
+              type: Type.STRING,
+              description: "O nome do técnico sugerido"
+            }
+          },
+          required: ["suggestedTechnicianName"]
         }
       }
     });
@@ -53,11 +57,11 @@ export const suggestTechnician = async (description: string, technicians: Techni
 };
 
 /**
- * Drafts a polite WhatsApp message to the client updating them on status.
+ * Drafts a polite WhatsApp message to the client using Gemini 3 Flash.
  */
 export const draftClientUpdate = async (clientName: string, status: string, technicianName: string): Promise<string> => {
   const ai = getAiClient();
-  if (!ai) return "";
+  if (!ai) return "Olá! Estamos atualizando seu chamado.";
 
   const prompt = `
     Escreva uma mensagem curta e profissional de WhatsApp para o cliente "${clientName}".
@@ -65,80 +69,59 @@ export const draftClientUpdate = async (clientName: string, status: string, tech
     Se o status for "FINALIZADO", pergunte se está tudo certo.
     Se for "EM ANDAMENTO", diga que estamos trabalhando nisso.
     Se for "ABERTO", confirme o recebimento.
-    Não use aspas na resposta.
+    Seja amigável e use emojis de tecnologia. Não use aspas na resposta.
   `;
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3-flash-preview',
       contents: prompt,
     });
-    return response.text || "";
+    return response.text || "Olá! Seu chamado foi atualizado.";
   } catch (error) {
     console.error("Error drafting message:", error);
-    return "";
+    return "Olá! Seu chamado teve uma atualização de status.";
   }
 };
 
 /**
- * AI Support Chat for the application help desk.
+ * AI Support Chat (Nova) using Gemini 3 Flash.
  */
 export const askSupportAI = async (userMessage: string, conversationHistory: {role: string, text: string}[]): Promise<string> => {
   const ai = getAiClient();
-  if (!ai) return "Desculpe, o serviço de IA não está configurado (API Key ausente).";
+  if (!ai) return "Desculpe, o serviço de IA (Nova) não está configurado. Por favor, adicione sua API_KEY do Google AI Studio nas configurações de hospedagem.";
 
-  // System context describing the application
   const systemContext = `
     Você é a **Nova**, a Inteligência Artificial exclusiva da "Inovati Soluções em TI".
     Sua personalidade é prestativa, técnica (mas acessível) e levemente entusiasmada com tecnologia.
-    Sua função é tirar dúvidas do usuário sobre como usar esta ferramenta específica.
     
-    FUNCIONALIDADES DO SISTEMA (Contexto):
-    1. **Visualização**: O sistema possui visualização em Kanban (colunas: Aberto, Em Andamento, Finalizado) e Dashboard (KPIs e gráficos).
-    2. **Chamados**:
-       - Botão "Novo Chamado" no topo cria tickets.
-       - IA sugere técnicos com base na descrição do problema.
-       - Botão WhatsApp envia atualizações automáticas para o cliente.
-    3. **Edição e Ações**:
-       - Cada cartão de chamado tem ícones para:
-         - **PDF**: Ícone vermelho, exporta APENAS aquele chamado para impressão formatada.
-         - **Excel (CSV)**: Ícone verde, baixa os dados daquele chamado.
-         - **Seta no Técnico**: Um botão estilo "dropdown" com o nome do técnico que abre a edição rápida.
-         - **Lápis**: Edita todas as informações.
-         - **Lixeira**: Exclui o chamado.
-       - Mudança de status muda a cor da lateral do cartão.
-    4. **Técnicos**: Pode-se gerenciar a equipe (Adicionar/Editar/Remover) pelo menu superior "Gerenciar Equipe".
-    5. **Configurações**: É possível mudar a cor do tema (Laranja, Azul, Roxo, etc) e ocultar botões de ação.
-    6. **Dados**: Tudo é salvo no LocalStorage do navegador (não tem banco de dados externo).
+    FUNCIONALIDADES DO SISTEMA:
+    1. Kanban: Colunas dinâmicas para gestão.
+    2. Dashboard: Gráficos de performance.
+    3. WhatsApp: Botão "Cliente" gera mensagens automáticas via IA.
+    4. Exportação: PDF para ordens de serviço e Excel para relatórios.
+    5. Equipe: Gestão de técnicos e especialidades.
+    6. Tema: Suporte a modo escuro e cores personalizadas.
 
-    Se o usuário perguntar seu nome, diga que é a Nova.
-    Se o usuário perguntar algo fora do contexto do sistema, responda educadamente que você só pode ajudar com dúvidas sobre a ferramenta Inovati.
-    Seja breve, direto e útil.
+    Instruções: Seja breve. Se não souber algo sobre o sistema, sugira falar com o suporte humano.
   `;
 
-  // Format history for the model
-  // We just append history to the prompt for simplicity in this stateless flow, 
-  // or structure it if using chat mode. Here we simulate chat turn.
-  const historyText = conversationHistory.map(h => `${h.role === 'user' ? 'Usuário' : 'Nova'}: ${h.text}`).join('\n');
-
-  const prompt = `
-    ${systemContext}
-
-    Histórico da conversa:
-    ${historyText}
-
-    Usuário: ${userMessage}
-    Nova:
-  `;
+  const historyParts = conversationHistory.map(h => ({
+    text: `${h.role === 'user' ? 'Usuário' : 'Nova'}: ${h.text}`
+  }));
 
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
+      model: 'gemini-3-flash-preview',
+      contents: [
+        { text: systemContext },
+        ...historyParts,
+        { text: `Usuário: ${userMessage}` }
+      ],
     });
-    return response.text || "Não consegui processar sua dúvida no momento.";
+    return response.text || "Não consegui processar sua dúvida.";
   } catch (error) {
     console.error("Error in support chat:", error);
-    return "Ocorreu um erro ao conectar com o suporte inteligente.";
+    return "Ops! Tive um pequeno curto-circuito. Pode repetir?";
   }
 };

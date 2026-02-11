@@ -6,11 +6,12 @@ import TicketCard from './components/TicketCard';
 import TicketForm from './components/TicketForm';
 import TechnicianModal from './components/TechnicianModal';
 import Dashboard from './components/Dashboard';
+import VersionsHistory from './components/VersionsHistory';
 import LoginScreen from './components/LoginScreen';
 import SettingsModal from './components/SettingsModal';
 import BrandLogo from './components/BrandLogo';
 import SupportChat from './components/SupportChat';
-import { Plus, Search, Users, LayoutDashboard, Kanban, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Plus, Search, Users, LayoutDashboard, Kanban, LogOut, Settings as SettingsIcon, History } from 'lucide-react';
 
 // Simple ID generator
 const generateId = () => Math.random().toString(36).substr(2, 9);
@@ -36,7 +37,7 @@ function App() {
   
   const [editingTicket, setEditingTicket] = useState<Ticket | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
-  const [viewMode, setViewMode] = useState<'kanban' | 'dashboard'>('kanban');
+  const [viewMode, setViewMode] = useState<'kanban' | 'dashboard' | 'versions'>('kanban');
   
   // Check for existing session
   useEffect(() => {
@@ -73,7 +74,6 @@ function App() {
 
     applyTheme();
 
-    // Listener for system changes if in auto mode
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
         if (config.themeMode === 'auto') applyTheme();
@@ -84,14 +84,12 @@ function App() {
 
   }, [config.themeMode]);
 
-  // Save Config
   const handleSaveConfig = (newConfig: SystemConfig) => {
       setConfig(newConfig);
       localStorage.setItem('inovati_config', JSON.stringify(newConfig));
       setIsSettingsOpen(false);
   };
 
-  // Load initial data for Tickets
   useEffect(() => {
     const savedTickets = localStorage.getItem(INITIAL_TICKETS_KEY);
     if (savedTickets) {
@@ -132,7 +130,6 @@ function App() {
     }
   }, []);
 
-  // Load initial data for Technicians
   useEffect(() => {
     const savedTechs = localStorage.getItem(TECHNICIANS_KEY);
     if (savedTechs) {
@@ -143,22 +140,18 @@ function App() {
     }
   }, []);
 
-  // Save Tickets on change
   useEffect(() => {
     if (tickets.length > 0) {
         localStorage.setItem(INITIAL_TICKETS_KEY, JSON.stringify(tickets));
     }
   }, [tickets]);
 
-   // Save Technicians on change
    useEffect(() => {
      if (technicians.length > 0) {
         localStorage.setItem(TECHNICIANS_KEY, JSON.stringify(technicians));
      }
    }, [technicians]);
 
-
-  // Auth Handlers
   const handleLogin = (email: string) => {
     setIsAuthenticated(true);
     localStorage.setItem('inovati_session', 'true');
@@ -169,18 +162,14 @@ function App() {
     localStorage.removeItem('inovati_session');
   };
 
-  // Ticket Handlers
   const handleSaveTicket = (data: CreateTicketDTO) => {
     if (editingTicket) {
-      // Update existing
       setTickets(tickets.map(t => t.id === editingTicket.id ? { 
         ...t, 
         ...data,
-        // Preserve comments when updating main data
         comments: t.comments || [] 
       } : t));
     } else {
-      // Create new
       const newTicket: Ticket = {
         id: generateId(),
         ...data,
@@ -195,13 +184,12 @@ function App() {
     closeModal();
   };
 
-  // Handler specifically for adding comments from the modal
   const handleAddComment = (ticketId: string, text: string) => {
     setTickets(tickets.map(t => {
         if (t.id === ticketId) {
             const newComment: TicketComment = {
                 id: generateId(),
-                author: 'Admin', // In a real app, use the logged user
+                author: 'Admin',
                 content: text,
                 createdAt: new Date().toISOString(),
                 type: 'NOTE'
@@ -240,7 +228,6 @@ function App() {
     }
   };
 
-  // Technician Handlers
   const handleAddTechnician = (name: string, specialty: string) => {
       const newTech: Technician = {
           id: generateId(),
@@ -260,7 +247,6 @@ function App() {
       }
   };
 
-  // Modal handlers
   const openCreateModal = () => {
     setEditingTicket(null);
     setIsModalOpen(true);
@@ -291,7 +277,6 @@ function App() {
 
   return (
     <div className="min-h-screen flex flex-col relative bg-gray-100 dark:bg-gray-900 transition-colors duration-300">
-      {/* Header */}
       <header className={`bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-sm sticky top-0 z-10 border-b-2 border-${config.themeColor}-600`}>
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
@@ -314,6 +299,13 @@ function App() {
                     >
                         <LayoutDashboard size={16} />
                         <span className="hidden sm:inline">Dashboard</span>
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('versions')}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${viewMode === 'versions' ? `bg-${config.themeColor}-600 text-white shadow` : 'text-gray-500 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'}`}
+                    >
+                        <History size={16} />
+                        <span className="hidden sm:inline">Versões</span>
                     </button>
                 </div>
 
@@ -353,7 +345,6 @@ function App() {
             </div>
           </div>
 
-          {/* Search only visible in Kanban mode */}
           {viewMode === 'kanban' && (
             <div className="mt-4 flex flex-col sm:flex-row gap-4 justify-between items-end sm:items-center animate-fade-in pb-1">
                 <div className="relative w-full sm:w-96">
@@ -374,18 +365,18 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-hidden flex flex-col">
         {viewMode === 'dashboard' ? (
             <div className="flex-1 overflow-y-auto">
                 <Dashboard tickets={tickets} technicians={technicians} config={config} />
             </div>
+        ) : viewMode === 'versions' ? (
+            <div className="flex-1 overflow-y-auto">
+                <VersionsHistory config={config} />
+            </div>
         ) : (
-            /* Kanban Board */
             <div className="flex-1 overflow-x-auto p-4 sm:p-6">
                 <div className="max-w-7xl mx-auto h-full grid grid-cols-1 md:grid-cols-3 gap-6 min-w-[300px]">
-                    
-                    {/* Column: Open */}
                     <div className="flex flex-col h-full bg-gray-200/60 dark:bg-gray-800/40 rounded-xl p-2 border border-gray-300 dark:border-gray-700">
                         <div className="flex items-center justify-between p-3 border-b border-gray-300 dark:border-gray-700 mb-2">
                             <h3 className="font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-2">
@@ -414,7 +405,6 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Column: In Progress */}
                     <div className={`flex flex-col h-full bg-${config.themeColor}-50/50 dark:bg-${config.themeColor}-900/10 rounded-xl p-2 border border-${config.themeColor}-200 dark:border-${config.themeColor}-900/30`}>
                         <div className={`flex items-center justify-between p-3 border-b border-${config.themeColor}-200 dark:border-${config.themeColor}-900/30 mb-2`}>
                             <h3 className={`font-semibold text-${config.themeColor}-900 dark:text-${config.themeColor}-300 flex items-center gap-2`}>
@@ -443,7 +433,6 @@ function App() {
                         </div>
                     </div>
 
-                    {/* Column: Finished */}
                     <div className="flex flex-col h-full bg-green-50/50 dark:bg-green-900/10 rounded-xl p-2 border border-green-200 dark:border-green-900/30">
                         <div className="flex items-center justify-between p-3 border-b border-green-200 dark:border-green-900/30 mb-2">
                             <h3 className="font-semibold text-green-800 dark:text-green-300 flex items-center gap-2">
@@ -471,13 +460,11 @@ function App() {
                             )}
                         </div>
                     </div>
-
                 </div>
             </div>
         )}
       </main>
 
-      {/* Support Chat Component */}
       <SupportChat config={config} />
 
       {isModalOpen && (
